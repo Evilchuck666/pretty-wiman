@@ -1,0 +1,425 @@
+#!/bin/bash
+
+# Returns:
+#    $WINDOW
+#    $X
+#    $Y
+#    $WIDTH
+#    $HEIGHT
+#    $SCREEN
+get_window_position() {
+    position=$(xdotool getwindowgeometry --shell "$(xdotool getactivewindow)");
+    eval "$position";
+}
+
+save_pid() {
+    if [ ! -d "$HOME/.pretty-wiman" ]; then
+        mkdir -p "$HOME/.pretty-wiman";
+    fi
+
+    echo -e "$position" > "$HOME/.pretty-wiman/$WINDOW.pid";
+}
+
+load_pid() {
+    get_window_position;
+    file="$HOME/.pretty-wiman/$WINDOW.pid";
+
+    if [ -f "$file" ]; then
+        content=$(<"$file");
+
+        eval "$content";
+    fi
+}
+
+clear_cache() {
+    rm -rf "$HOME/.pretty-wiman";
+}
+
+toggle_fullscreen() {
+    get_window_position;
+
+    primary_width=$(xrandr | awk '/ primary/{getline; print}' | awk '{print $1}' | awk -Fx '{print $1}');
+
+    if ((X > primary_width - 1)); then
+        screen_width=$(xrandr | awk '!/ primary/' | awk '/ connected/{getline; print $1}' | awk -Fx '{print $1}');
+    else
+        screen_width=$primary_width;
+    fi
+
+    screen_width=$((screen_width - 10));
+
+    if ((WIDTH == screen_width)); then
+        unscreen;
+    else
+        fullscreen;
+    fi
+}
+
+fullscreen() {
+    get_window_position;
+    save_pid;
+
+    primary_width=$(xrandr | awk '/ primary/{getline; print}' | awk '{print $1}' | awk -Fx '{print $1}');
+
+    if ((X > primary_width - 1)); then
+        screen_info=$(xrandr | awk '!/ primary/' | awk '/ connected/{getline; print $1}');
+        screen_width=$(echo "$screen_info" | awk -Fx '{print $1}');
+        screen_height=$(echo "$screen_info" | awk -Fx '{print $2}');
+
+        x_offset=$((primary_width + 5));
+    else
+        screen_width=$primary_width;
+        screen_height=$(xrandr | awk '/ primary/' | awk -Fx '{print $2}' | awk -F+ '{print $1}');
+
+        x_offset=5;
+    fi
+
+    y_offset=5;
+
+    screen_width=$((screen_width - 10));
+    screen_height=$((screen_height - 10));
+
+    move_window "$screen_width" "$screen_height" "$WINDOW" "$WIDTH" "$HEIGHT" "$X" "$Y" "$x_offset" "$y_offset";
+}
+
+unscreen() {
+    get_window_position;
+
+    primary_width=$(xrandr | awk '/ primary/{getline; print}' | awk '{print $1}' | awk -Fx '{print $1}');
+
+    if ((X > primary_width - 1)); then
+        screen_info=$(xrandr | awk '!/ primary/' | awk '/ connected/{getline; print $1}');
+        screen_width=$(echo "$screen_info" | awk -Fx '{print $1}');
+        screen_height=$(echo "$screen_info" | awk -Fx '{print $2}');
+
+        x_offset=$primary_width;
+    else
+        screen_width=$primary_width;
+        screen_height=$(xrandr | awk '/ primary/' | awk -Fx '{print $2}' | awk -F+ '{print $1}');
+
+        x_offset=5;
+    fi
+
+    y_offset=5;
+
+    screen_width=$((WIDTH - 10));
+    screen_height=$((HEIGHT - 10));
+
+    load_pid;
+    move_window "$WIDTH" "$HEIGHT" "$WINDOW" "$screen_width" "$screen_height" "$x_offset" "$y_offset" "$X" "$Y";
+}
+
+move_window() {
+    screen_width=$1;
+    screen_height=$2;
+    WINDOW=$3;
+    WIDTH=$4;
+    HEIGHT=$5;
+    X=$6;
+    Y=$7;
+    x_offset=$8;
+    y_offset=$9;
+
+    steps=25;
+
+    x_step=$(bc -l <<< "scale=3; ($screen_width - $WIDTH) / $steps");
+    y_step=$(bc -l <<< "scale=3; ($screen_height - $HEIGHT) / $steps");
+
+    x_move_step=$(bc -l <<< "scale=3; ($X - $x_offset) / $steps");
+    y_move_step=$(bc -l <<< "scale=3; ($Y - $y_offset) / $steps");
+
+    new_width=$(bc -l <<< "scale=3; $WIDTH + $x_step");
+    new_height=$(bc -l <<< "scale=3; $HEIGHT + $y_step");
+
+    new_x=$(bc -l <<< "scale=3; $X - $x_move_step");
+    new_y=$(bc -l <<< "scale=3; $Y - $y_move_step");
+
+    for ((i=0; i<steps; i++))
+    do
+        xdotool windowsize "$WINDOW" "$new_width" "$new_height";
+        xdotool windowmove "$WINDOW" "$new_x" "$new_y";
+
+        new_width=$(bc -l <<< "scale=3; $new_width + $x_step");
+        new_height=$(bc -l <<< "scale=3; $new_height + $y_step");
+
+        new_x=$(bc -l <<< "scale=3; $new_x - $x_move_step");
+        new_y=$(bc -l <<< "scale=3; $new_y - $y_move_step");
+    done
+}
+
+toggle_display() {
+    get_window_position;
+
+    primary_width=$(xrandr | awk '/ primary/{getline; print}' | awk '{print $1}' | awk -Fx '{print $1}');
+
+    if ((X > primary_width - 1)); then
+        primary_width=$((-primary_width));
+    fi
+
+    x_offset=$((X + primary_width));
+
+    move_window "$WIDTH" "$HEIGHT" "$WINDOW" "$WIDTH" "$HEIGHT" "$X" "$Y" "$x_offset" "$Y";
+}
+
+north() {
+    get_window_position;
+
+    primary_width=$(xrandr | awk '/ primary/{getline; print}' | awk '{print $1}' | awk -Fx '{print $1}');
+
+    if ((X > primary_width - 1)); then
+        screen_info=$(xrandr | awk '!/ primary/' | awk '/ connected/{getline; print $1}');
+        screen_width=$(echo "$screen_info" | awk -Fx '{print $1}');
+        screen_height=$(echo "$screen_info" | awk -Fx '{print $2}');
+
+        x_offset=$primary_width;
+    else
+        screen_width=$primary_width;
+        screen_height=$(xrandr | awk '/ primary/' | awk -Fx '{print $2}' | awk -F+ '{print $1}');
+
+        x_offset=0;
+    fi
+
+    screen_height=$(bc -l <<< "scale=3; $screen_height / 2");
+
+    y_offset=0;
+
+    move_window "$screen_width" "$screen_height" "$WINDOW" "$WIDTH" "$HEIGHT" "$X" "$Y" "$x_offset" "$y_offset";
+}
+
+south() {
+    get_window_position;
+
+    primary_width=$(xrandr | awk '/ primary/{getline; print}' | awk '{print $1}' | awk -Fx '{print $1}');
+
+    if ((X > primary_width - 1)); then
+        screen_info=$(xrandr | awk '!/ primary/' | awk '/ connected/{getline; print $1}');
+        screen_width=$(echo "$screen_info" | awk -Fx '{print $1}');
+        screen_height=$(echo "$screen_info" | awk -Fx '{print $2}');
+
+        x_offset=$primary_width;
+    else
+        screen_width=$primary_width;
+        screen_height=$(xrandr | awk '/ primary/' | awk -Fx '{print $2}' | awk -F+ '{print $1}');
+
+        x_offset=0;
+    fi
+
+    screen_height=$(bc -l <<< "scale=3; $screen_height / 2");
+    y_offset=$screen_height;
+
+    move_window "$screen_width" "$screen_height" "$WINDOW" "$WIDTH" "$HEIGHT" "$X" "$Y" "$x_offset" "$y_offset";
+}
+
+east() {
+    get_window_position;
+
+    primary_width=$(xrandr | awk '/ primary/{getline; print}' | awk '{print $1}' | awk -Fx '{print $1}');
+
+    if ((X > primary_width - 1)); then
+        screen_info=$(xrandr | awk '!/ primary/' | awk '/ connected/{getline; print $1}');
+        screen_width=$(echo "$screen_info" | awk -Fx '{print $1}');
+        screen_height=$(echo "$screen_info" | awk -Fx '{print $2}');
+        half_screen_width=$(bc -l <<< "scale=3; $screen_width / 2");
+
+        x_offset=$(bc -l <<< "scale=3; $screen_width + $half_screen_width");
+    else
+        screen_width=$primary_width;
+        screen_height=$(xrandr | awk '/ primary/' | awk -Fx '{print $2}' | awk -F+ '{print $1}');
+        half_screen_width=$(bc -l <<< "scale=3; $screen_width / 2");
+
+        x_offset=$half_screen_width;
+    fi
+
+    y_offset=0;
+
+    move_window "$half_screen_width" "$screen_height" "$WINDOW" "$WIDTH" "$HEIGHT" "$X" "$Y" "$x_offset" "$y_offset";
+}
+
+west() {
+    get_window_position;
+
+    primary_width=$(xrandr | awk '/ primary/{getline; print}' | awk '{print $1}' | awk -Fx '{print $1}');
+
+    if ((X > primary_width - 1)); then
+        screen_info=$(xrandr | awk '!/ primary/' | awk '/ connected/{getline; print $1}');
+        screen_width=$(echo "$screen_info" | awk -Fx '{print $1}');
+        screen_height=$(echo "$screen_info" | awk -Fx '{print $2}');
+        half_screen_width=$(bc -l <<< "scale=3; $screen_width / 2");
+
+        x_offset=$primary_width;
+    else
+        screen_width=$primary_width;
+        screen_height=$(xrandr | awk '/ primary/' | awk -Fx '{print $2}' | awk -F+ '{print $1}');
+        half_screen_width=$(bc -l <<< "scale=3; $screen_width / 2");
+
+        x_offset=0;
+    fi
+
+    y_offset=0;
+
+    move_window "$half_screen_width" "$screen_height" "$WINDOW" "$WIDTH" "$HEIGHT" "$X" "$Y" "$x_offset" "$y_offset";
+}
+
+north_east() {
+    get_window_position;
+
+    primary_width=$(xrandr | awk '/ primary/{getline; print}' | awk '{print $1}' | awk -Fx '{print $1}');
+
+    if ((X > primary_width - 1)); then
+        screen_info=$(xrandr | awk '!/ primary/' | awk '/ connected/{getline; print $1}');
+        screen_width=$(echo "$screen_info" | awk -Fx '{print $1}');
+        screen_height=$(echo "$screen_info" | awk -Fx '{print $2}');
+        half_screen_width=$(bc -l <<< "scale=3; $screen_width / 2");
+
+        x_offset=$(bc -l <<< "scale=3; $screen_width + $half_screen_width");
+    else
+        screen_width=$primary_width;
+        screen_height=$(xrandr | awk '/ primary/' | awk -Fx '{print $2}' | awk -F+ '{print $1}');
+        half_screen_width=$(bc -l <<< "scale=3; $screen_width / 2");
+
+        x_offset=$half_screen_width;
+    fi
+
+    screen_height=$(bc -l <<< "scale=3; $screen_height / 2");
+    y_offset=0;
+
+    move_window "$half_screen_width" "$screen_height" "$WINDOW" "$WIDTH" "$HEIGHT" "$X" "$Y" "$x_offset" "$y_offset";
+}
+
+north_west() {
+    get_window_position;
+
+    primary_width=$(xrandr | awk '/ primary/{getline; print}' | awk '{print $1}' | awk -Fx '{print $1}');
+
+    if ((X > primary_width - 1)); then
+        screen_info=$(xrandr | awk '!/ primary/' | awk '/ connected/{getline; print $1}');
+        screen_width=$(echo "$screen_info" | awk -Fx '{print $1}');
+        screen_height=$(echo "$screen_info" | awk -Fx '{print $2}');
+        half_screen_width=$(bc -l <<< "scale=3; $screen_width / 2");
+
+        x_offset=$primary_width;
+    else
+        screen_width=$primary_width;
+        screen_height=$(xrandr | awk '/ primary/' | awk -Fx '{print $2}' | awk -F+ '{print $1}');
+        half_screen_width=$(bc -l <<< "scale=3; $screen_width / 2");
+
+        x_offset=0;
+    fi
+
+    screen_height=$(bc -l <<< "scale=3; $screen_height / 2");
+    y_offset=0;
+
+    move_window "$half_screen_width" "$screen_height" "$WINDOW" "$WIDTH" "$HEIGHT" "$X" "$Y" "$x_offset" "$y_offset";
+}
+
+south_east() {
+    get_window_position;
+
+    primary_width=$(xrandr | awk '/ primary/{getline; print}' | awk '{print $1}' | awk -Fx '{print $1}');
+
+    if ((X > primary_width - 1)); then
+        screen_info=$(xrandr | awk '!/ primary/' | awk '/ connected/{getline; print $1}');
+        screen_width=$(echo "$screen_info" | awk -Fx '{print $1}');
+        screen_height=$(echo "$screen_info" | awk -Fx '{print $2}');
+        half_screen_width=$(bc -l <<< "scale=3; $screen_width / 2");
+
+        x_offset=$(bc -l <<< "scale=3; $screen_width + $half_screen_width");
+    else
+        screen_width=$primary_width;
+        screen_height=$(xrandr | awk '/ primary/' | awk -Fx '{print $2}' | awk -F+ '{print $1}');
+        half_screen_width=$(bc -l <<< "scale=3; $screen_width / 2");
+
+        x_offset=$half_screen_width;
+    fi
+
+    screen_height=$(bc -l <<< "scale=3; $screen_height / 2");
+    y_offset=$screen_height;
+
+    move_window "$half_screen_width" "$screen_height" "$WINDOW" "$WIDTH" "$HEIGHT" "$X" "$Y" "$x_offset" "$y_offset";
+}
+
+south_west() {
+    get_window_position;
+
+    primary_width=$(xrandr | awk '/ primary/{getline; print}' | awk '{print $1}' | awk -Fx '{print $1}');
+
+    if ((X > primary_width - 1)); then
+        screen_info=$(xrandr | awk '!/ primary/' | awk '/ connected/{getline; print $1}');
+        screen_width=$(echo "$screen_info" | awk -Fx '{print $1}');
+        screen_height=$(echo "$screen_info" | awk -Fx '{print $2}');
+        half_screen_width=$(bc -l <<< "scale=3; $screen_width / 2");
+
+        x_offset=$primary_width;
+    else
+        screen_width=$primary_width;
+        screen_height=$(xrandr | awk '/ primary/' | awk -Fx '{print $2}' | awk -F+ '{print $1}');
+        half_screen_width=$(bc -l <<< "scale=3; $screen_width / 2");
+
+        x_offset=0;
+    fi
+
+    screen_height=$(bc -l <<< "scale=3; $screen_height / 2");
+    y_offset=$screen_height;
+
+    move_window "$half_screen_width" "$screen_height" "$WINDOW" "$WIDTH" "$HEIGHT" "$X" "$Y" "$x_offset" "$y_offset";
+}
+
+center() {
+    get_window_position;
+
+    primary_width=$(xrandr | awk '/ primary/{getline; print}' | awk '{print $1}' | awk -Fx '{print $1}');
+
+    if ((X > primary_width - 1)); then
+        screen_info=$(xrandr | awk '!/ primary/' | awk '/ connected/{getline; print $1}');
+        screen_width=$(echo "$screen_info" | awk -Fx '{print $1}');
+        screen_height=$(echo "$screen_info" | awk -Fx '{print $2}');
+
+        x_offset=$primary_width;
+    else
+        screen_width=$primary_width;
+        screen_height=$(xrandr | awk '/ primary/' | awk -Fx '{print $2}' | awk -F+ '{print $1}');
+
+        x_offset=0;
+    fi
+
+    x_offset=$(bc -l <<< "scale=3; ($screen_width - $WIDTH) / 2 + $x_offset");
+    y_offset=$(bc -l <<< "scale=3; ($screen_height - $HEIGHT) / 2");
+
+    move_window "$WIDTH" "$HEIGHT" "$WINDOW" "$WIDTH" "$HEIGHT" "$X" "$Y" "$x_offset" "$y_offset";
+}
+
+cardinal_position=$1;
+
+case $cardinal_position in
+    "N")
+        north;;
+    "S")
+        south;;
+    "E")
+        east;;
+    "W")
+        west;;
+    "NE")
+        north_east;;
+    "NW")
+        north_west;;
+    "SE")
+        south_east;;
+    "SW")
+        south_west;;
+    "C")
+        center;;
+    "F")
+        fullscreen;;
+    "U")
+        unscreen;;
+    "TF")
+        toggle_fullscreen;;
+    "TD")
+        toggle_display;;
+    "CC")
+        clear_cache;;
+    *)
+        echo "Invalid option";
+        exit 1;;
+esac
